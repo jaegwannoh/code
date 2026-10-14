@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>분석현황 수정</h1>
+<form method="post" class="card">
+  <input type="hidden" name="next" value="{{ request.args.next or '' }}">
+  <div class="form-row">
+    <label class="field">담당자
+      <select class="inp" name="manager_id">
+        {% for u in managers %}
+        <option value="{{ u.id }}" {% if u.id == item.manager_id %}selected{% endif %}>{{ u.grade }} {{ u.name }}</option>
+        {% endfor %}
+        {# 계정이 지워진 담당자도 기존 값 유지 (manager_known 은 app.py 에서 계산) #}
+        {% if not manager_known %}<option value="keep" selected>{{ item.manager }}</option>{% endif %}
+      </select>
+    </label>
+    <label class="field">시작일<input class="inp" type="date" name="start_date" value="{{ item.start_date }}"></label>
+    <label class="field">종료일 (비우면 분석중)<input class="inp" type="date" name="end_date" value="{{ item.end_date or '' }}"></label>
+  </div>
+  <div class="form-row">
+    <label class="field">CaseNotation<input class="inp" type="text" name="case_notation" value="{{ item.case_notation }}" required></label>
+    <label class="field wide">비고<input class="inp" type="text" name="note" value="{{ item.note }}"></label>
+  </div>
+  <div><button class="btn" type="submit">저장</button>
+    <a class="btn2" href="{{ request.args.next or url_for('analysis') }}">취소</a></div>
+</form>
+{% endblock %}

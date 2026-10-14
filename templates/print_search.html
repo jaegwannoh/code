@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>검색 결과 인쇄</title>
+<style>
+  body { margin: 0; background: #5F6670; font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; color: #1A1D21; }
+  .toolbar { max-width: 794px; margin: 20px auto; display: flex; justify-content: flex-end; }
+  .toolbar button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid #fff; background: #1E4D7B; color: #fff; cursor: pointer; }
+  .sheet { width: 794px; min-height: 1123px; margin: 0 auto 40px; background: #fff; padding: 50px 56px; box-sizing: border-box; }
+  h1 { font-size: 20px; text-align: center; margin: 0 0 6px; }
+  .cond { text-align: center; font-size: 13px; color: #4D545C; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { border: 1px solid #8A9096; background: #EEF0EC; padding: 4px 6px; font-weight: 500; white-space: nowrap; }
+  td { border: 1px solid #8A9096; padding: 4px 6px; vertical-align: top; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar"><button type="button" onclick="window.print()">인쇄</button></div>
+<div class="sheet">
+  <h1>검색 결과</h1>
+  <div class="cond">
+    검색어: {{ p.q or '(전체)' }} · 기준: {{ {'all':'전체','name':'이름','content':'내용'}[p.field] or '전체' }}
+    · 기간: {{ p.start }} ~ {{ p.end }} · {{ results|length }}건
+  </div>
+  <table>
+    <thead><tr><th>날짜</th><th>구분</th><th>팀</th><th>작성자</th><th>내용</th></tr></thead>
+    <tbody>
+      {% for r in results %}
+      <tr><td style="white-space:nowrap">{{ r.date }}</td><td style="white-space:nowrap">{{ r.kind }}</td><td>{{ r.team }}</td><td style="white-space:nowrap">{{ r.person }}</td><td>{{ r.content }}</td></tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center">검색 결과가 없습니다.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

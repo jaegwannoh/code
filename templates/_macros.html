@@ -1,0 +1,54 @@
+{#
+  _macros.html - 여러 화면에서 반복해서 쓰는 HTML 조각(매크로) 모음
+  사용법: {% from '_macros.html' import date_nav, badge with context %}
+#}
+
+{# 날짜 이동 줄: ◀ 날짜 ▶ [달력] [오늘] ... [엑셀] [인쇄]
+   keep : 날짜를 옮겨도 유지할 값 (예: 분석현황의 {'who': 'me'}) #}
+{% macro date_nav(base_url, heading, d, prev_d, next_d, d_label, today, keep={}) %}
+<div class="toolbar">
+  <h1>{{ heading }}</h1>
+  <span class="grow"></span>
+  <a class="btn2" href="{{ url_for('export_day', date=d) }}">엑셀 다운로드</a>
+  <a class="btn2" href="{{ url_for('print_day', date=d) }}" target="_blank">인쇄</a>
+</div>
+<div class="toolbar">
+  <a class="btn2" href="{{ base_url }}?date={{ prev_d }}{% for k, v in keep|dictsort %}&amp;{{ k }}={{ v }}{% endfor %}" aria-label="이전 날짜">◀</a>
+  <strong style="font-size:18px">{{ d_label }}</strong>
+  <a class="btn2" href="{{ base_url }}?date={{ next_d }}{% for k, v in keep|dictsort %}&amp;{{ k }}={{ v }}{% endfor %}" aria-label="다음 날짜">▶</a>
+  <form method="get" action="{{ base_url }}" class="inline">
+    <input class="inp" type="date" name="date" value="{{ d }}" aria-label="날짜 선택"
+           onchange="this.form.submit()" style="width:auto">
+    {% for k, v in keep|dictsort %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  </form>
+  <a class="btn2" href="{{ base_url }}?date={{ today }}{% for k, v in keep|dictsort %}&amp;{{ k }}={{ v }}{% endfor %}">오늘</a>
+</div>
+{% endmacro %}
+
+{# 팀 배지: 3팀은 남색, 5팀은 주황 #}
+{% macro badge(team) %}<span class="badge t{{ team[0] }}">{{ team }}</span>{% endmacro %}
+
+{# 미제출 인원: 누르면 이름이 펼쳐짐 #}
+{% macro missing_box(missing) %}
+{% if missing %}
+<details class="missing">
+  <summary>미제출 {{ missing|length }}명</summary>
+  <div>{% for u in missing %}{{ u.grade }} {{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+</details>
+{% else %}
+<span class="ok">미제출 없음</span>
+{% endif %}
+{% endmacro %}
+
+{# 삭제 버튼 (확인창 띄운 뒤 POST) #}
+{% macro delete_button(action, label='삭제') %}
+<form method="post" action="{{ action }}" class="inline" onsubmit="return confirm('{{ label }}할까요?')">
+  <input type="hidden" name="next" value="{{ here }}">
+  <button class="btn2 sm" type="submit">{{ label }}</button>
+</form>
+{% endmacro %}
+
+{# 수정 버튼 (수정 화면으로 이동, 저장 후 지금 화면으로 돌아옴) #}
+{% macro edit_link(endpoint, item_id) %}
+<a class="btn2 sm" href="{{ url_for(endpoint, item_id=item_id, next=here) }}">수정</a>
+{% endmacro %}

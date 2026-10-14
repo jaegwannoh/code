@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>업무일지 {{ d }}</title>
+{#
+  print_day.html - 하루치 업무일지 인쇄용 화면 (A4 세로)
+  위쪽 체크박스로 인쇄할 항목을 고르고 [인쇄] 를 누릅니다.
+  @media print 안의 규칙은 '인쇄할 때만' 적용됩니다.
+#}
+<style>
+  body { margin: 0; background: #5F6670; font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; color: #1A1D21; }
+  .toolbar { max-width: 794px; margin: 20px auto; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; color: #fff; }
+  .toolbar label { display: inline-flex; align-items: center; gap: 6px; }
+  .toolbar button { font: inherit; padding: 8px 18px; border-radius: 6px; border: 1px solid #fff; background: #1E4D7B; color: #fff; cursor: pointer; }
+  .toolbar .grow { flex: 1 1 auto; }
+  .sheet { width: 794px; min-height: 1123px; margin: 0 auto 40px; background: #fff; padding: 50px 56px; box-sizing: border-box; }
+  .head { text-align: center; margin-bottom: 20px; }
+  .head .t { font-size: 24px; font-weight: 700; letter-spacing: 4px; }
+  .sec { margin-bottom: 18px; }
+  .sec h2 { margin: 0 0 6px; font-size: 16px; border-bottom: 2px solid #1A1D21; padding-bottom: 3px; }
+  .line { margin: 2px 0; font-size: 14px; }
+  .detail { margin: 0 0 4px 14px; font-size: 12.5px; color: #4D545C; white-space: pre-line; }
+  .missing { font-size: 12.5px; color: #4D545C; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { border: 1px solid #8A9096; background: #EEF0EC; padding: 4px 6px; font-weight: 500; }
+  td { border: 1px solid #8A9096; padding: 4px 6px; }
+  .none { font-size: 13px; color: #4D545C; }
+  @page { size: A4 portrait; margin: 15mm; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { width: auto; min-height: 0; margin: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <strong>인쇄 항목</strong>
+  <label><input type="checkbox" data-target="sec-leave" checked>휴가/부재</label>
+  <label><input type="checkbox" data-target="sec-daily3" checked>3팀 일일업무</label>
+  <label><input type="checkbox" data-target="sec-signal" checked>3팀 신호처리</label>
+  <label><input type="checkbox" data-target="sec-daily5" checked>5팀 일일업무</label>
+  <label><input type="checkbox" data-target="sec-analysis" checked>5팀 분석현황</label>
+  <label><input type="checkbox" id="show-detail" checked>세부내용</label>
+  <span class="grow"></span>
+  <button type="button" onclick="window.print()">인쇄</button>
+</div>
+
+<div class="sheet">
+  <div class="head">
+    <div class="t">Daily Work</div>
+    <div>{{ d_label }}</div>
+  </div>
+
+  <div class="sec" id="sec-leave">
+    <h2>휴가/부재</h2>
+    {% for l in data.leaves %}
+    <div class="line">{{ l.kind }} : {{ l.grade }} {{ l.name }} ({{ l.team }}{% if l.start_date != l.end_date %}, {{ l.start_date[5:] }}~{{ l.end_date[5:] }}{% endif %}){% if l.note %} - {{ l.note }}{% endif %}</div>
+    {% else %}<div class="none">없음</div>{% endfor %}
+  </div>
+
+  {% for t in teams %}
+  {% set td = data.teams[t] %}
+  <div class="sec" id="sec-daily{{ t[0] }}">
+    <h2>{{ t }} 일일업무</h2>
+    {% for w in td.works %}
+    <div class="line">· {{ w.grade }} {{ w.name }} - {{ w.title }}</div>
+    {% if w.detail %}<div class="detail">{{ w.detail }}</div>{% endif %}
+    {% else %}<div class="none">없음</div>{% endfor %}
+    {% if td.missing %}
+    <div class="missing">미제출 {{ td.missing|length }}명: {% for u in td.missing %}{{ u.grade }} {{ u.name }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+    {% endif %}
+  </div>
+
+  {% if t == '3팀' %}
+  <div class="sec" id="sec-signal">
+    <h2>3팀 신규 신호처리</h2>
+    {% if data.signals %}
+    <table>
+      <thead><tr><th>급수</th><th>이름</th><th>위성명</th><th>CaseNotation</th></tr></thead>
+      <tbody>{% for s in data.signals %}<tr><td>{{ s.grade }}</td><td>{{ s.name }}</td><td>{{ s.satellite }}</td><td>{{ s.case_notation }}</td></tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<div class="none">없음</div>{% endif %}
+  </div>
+  {% else %}
+  <div class="sec" id="sec-analysis">
+    <h2>5팀 분석현황</h2>
+    {% if data.ongoing or data.finished %}
+    <table>
+      <thead><tr><th>상태</th><th>담당자</th><th>시작일</th><th>종료일</th><th>CaseNotation</th><th>비고</th></tr></thead>
+      <tbody>
+        {% for a in data.ongoing %}<tr><td>분석중</td><td>{{ a.manager }}</td><td>{{ a.start_date }}</td><td></td><td>{{ a.case_notation }}</td><td>{{ a.note }}</td></tr>{% endfor %}
+        {% for a in data.finished %}<tr><td>분석종료</td><td>{{ a.manager }}</td><td>{{ a.start_date }}</td><td>{{ a.end_date }}</td><td>{{ a.case_notation }}</td><td>{{ a.note }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="none">없음</div>{% endif %}
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+
+<script>
+  // 체크박스를 끄면 해당 항목을 숨겨서 인쇄에서 빠지게 합니다.
+  document.querySelectorAll('input[data-target]').forEach(function (box) {
+    box.addEventListener('change', function () {
+      document.getElementById(box.dataset.target).style.display = box.checked ? '' : 'none';
+    });
+  });
+  document.getElementById('show-detail').addEventListener('change', function () {
+    var show = this.checked;
+    document.querySelectorAll('.detail').forEach(function (el) { el.style.display = show ? '' : 'none'; });
+  });
+</script>
+</body>
+</html>

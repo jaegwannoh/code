@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}계정 만들기 - Daily Work{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="login-title"><div>계정 만들기</div></div>
+
+  <form method="post" class="card">
+    <label class="field">순번 (로그인 ID, 숫자)
+      <input class="inp" type="text" name="seq" inputmode="numeric" value="{{ request.form.seq }}" required>
+    </label>
+    <label class="field">소속팀
+      <select class="inp" name="team">
+        {% for t in teams %}<option {% if request.form.team == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">급수
+      <select class="inp" name="grade">
+        {% for gr in grades %}<option {% if (request.form.grade or '7급') == gr %}selected{% endif %}>{{ gr }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">이름
+      <input class="inp" type="text" name="name" value="{{ request.form.name }}" required>
+    </label>
+    <label class="field">비밀번호
+      <input class="inp" type="password" name="password" required>
+    </label>
+    <button class="btn" type="submit">계정 만들기</button>
+  </form>
+
+  <div style="text-align:center"><a href="{{ url_for('login') }}">← 로그인으로 돌아가기</a></div>
+</div>
+{% endblock %}

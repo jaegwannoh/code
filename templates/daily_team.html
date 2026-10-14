@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import date_nav, badge, missing_box, delete_button, edit_link with context %}
+{# daily_team.html - 3팀 / 5팀 일일업무 입력·관리 #}
+{% block content %}
+{{ date_nav(url_for('daily_team', team=team), t ~ ' 일일업무', d, prev_d, next_d, d_label, today) }}
+
+<section class="card">
+  <h2>일일업무 입력</h2>
+  {% if members %}
+  <form method="post" action="{{ url_for('daily_add') }}" style="display:flex;flex-direction:column;gap:12px">
+    <input type="hidden" name="work_date" value="{{ d }}">
+    <input type="hidden" name="next" value="{{ here }}">
+    <div class="form-row">
+      <label class="field narrow" style="flex-basis:200px">작성자
+        <select class="inp" name="user_id">
+          {% for u in members %}
+          <option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.grade }} {{ u.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field wide">업무 내용
+        <input class="inp" type="text" name="title" placeholder="예: AFTN통신망 프로그램 개발" required>
+      </label>
+    </div>
+    <label class="field">세부 내용 (선택)
+      <textarea class="inp" name="detail" placeholder="업무에 대한 설명을 적어주세요"></textarea>
+    </label>
+    <div><button class="btn" type="submit">추가</button>
+      <span class="muted" style="margin-left:8px">한 사람이 여러 건 추가할 수 있습니다.</span></div>
+  </form>
+  {% else %}
+  <p class="muted">{{ t }} 계정이 없습니다. <a href="{{ url_for('accounts') }}">계정관리</a>에서 먼저 추가하세요.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head">
+    {{ badge(t) }}<h2>{{ d }} 일일업무</h2><span class="muted">{{ works|length }}건</span>
+  </div>
+  {{ missing_box(missing) }}
+  <div class="scroll">
+    <table class="sortable">
+      <thead><tr><th>작성자</th><th>업무내용</th><th>세부내용</th><th data-nosort>관리</th></tr></thead>
+      <tbody>
+        {% for w in works %}
+        <tr>
+          <td class="nw">{{ w.grade }} {{ w.name }}</td>
+          <td>{{ w.title }}</td>
+          <td class="detail">{{ w.detail }}</td>
+          <td class="actions">{{ edit_link('daily_edit', w.id) }} {{ delete_button(url_for('daily_delete', item_id=w.id)) }}</td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="4">등록된 업무가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

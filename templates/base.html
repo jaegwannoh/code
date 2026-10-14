@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Daily Work{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="{{ url_for('static', filename='sort.js') }}"></script>
+</head>
+<body>
+{#
+  base.html - 모든 화면의 공통 틀 (상단 메뉴 + 알림 메시지)
+  다른 템플릿은 {% extends 'base.html' %} 로 이 틀을 물려받고
+  {% block content %} 부분만 채웁니다.
+#}
+{% if g.user %}
+{# 날짜를 보고 있던 중이면 메뉴를 눌러도 같은 날짜로 이동 #}
+{% set qd = {'date': d} if d else {} %}
+{% set menu = [
+  ('index',    '업무일지',     url_for('index', **qd)),
+  ('daily3',   '3팀 일일업무', url_for('daily_team', team='3', **qd)),
+  ('signal',   '3팀 신호처리', url_for('signal', **qd)),
+  ('daily5',   '5팀 일일업무', url_for('daily_team', team='5', **qd)),
+  ('analysis', '5팀 분석현황', url_for('analysis', **qd)),
+  ('leave',    '휴가/부재',    url_for('leave')),
+  ('search',   '검색',         url_for('search')),
+  ('accounts', '계정관리',     url_for('accounts')),
+  ('settings', '설정',         url_for('settings')),
+] %}
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="{{ url_for('index') }}">Daily Work</a>
+    <nav aria-label="주 메뉴">
+      {% for key, label, href in menu %}
+      <a class="nav{% if active == key %} on{% endif %}" href="{{ href }}">{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <div class="me">
+      <span>{{ g.user.team }} · {{ g.user.grade }} {{ g.user.name }}</span>
+      <a class="nav" href="{{ url_for('logout') }}">로그아웃</a>
+    </div>
+  </div>
+</header>
+{% endif %}
+
+<main class="wrap">
+  {% for msg in get_flashed_messages() %}
+  <div class="flash">{{ msg }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

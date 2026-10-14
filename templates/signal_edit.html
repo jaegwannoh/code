@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>신호처리 수정</h1>
+<form method="post" class="card">
+  <input type="hidden" name="next" value="{{ request.args.next or '' }}">
+  <div class="form-row">
+    <label class="field">날짜<input class="inp" type="date" name="work_date" value="{{ item.work_date }}"></label>
+    <label class="field">작성자
+      <select class="inp" name="user_id">
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if u.id == item.user_id %}selected{% endif %}>{{ u.team }} {{ u.grade }} {{ u.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">위성명
+      <select class="inp" name="satellite">
+        {# 목록에서 지워진 위성이어도 기존 값은 선택지에 남겨 둠 #}
+        {# satellite_names 는 app.py 에서 만든 위성 이름 목록 #}
+        {% if item.satellite not in satellite_names %}<option selected>{{ item.satellite }}</option>{% endif %}
+        {% for n in satellite_names %}<option {% if n == item.satellite %}selected{% endif %}>{{ n }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">CaseNotation<input class="inp" type="text" name="case_notation" value="{{ item.case_notation }}" required></label>
+  </div>
+  <div><button class="btn" type="submit">저장</button>
+    <a class="btn2" href="{{ request.args.next or url_for('signal') }}">취소</a></div>
+</form>
+{% endblock %}

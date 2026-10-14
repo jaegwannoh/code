@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{# settings.html - 백업 설정 #}
+{% block content %}
+<h1>설정 · 백업</h1>
+
+<section class="card">
+  <h2>백업 설정</h2>
+  <form method="post" class="form-row">
+    <label class="field wide">백업 폴더 경로 (없으면 자동으로 만듭니다)
+      <input class="inp" type="text" name="backup_dir" value="{{ backup_dir }}" required>
+    </label>
+    <label class="field narrow">보관 기간 (일)
+      <input class="inp" type="number" name="retention_days" value="{{ retention_days }}" min="1" required>
+    </label>
+    <button class="btn" type="submit">저장</button>
+  </form>
+  <div class="toolbar muted">
+    <span>자동 백업: 매일 1회 (프로그램이 켜져 있을 때 1시간마다 확인)</span>
+    <span>· {{ retention_days }}일이 지난 백업은 자동 삭제</span>
+    <span class="grow"></span>
+    <form method="post" action="{{ url_for('backup_now') }}" class="inline">
+      <button class="btn2" type="submit">지금 백업하기</button>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>백업 파일 <span class="muted">{{ files|length }}개</span></h2>
+  <div class="scroll">
+    <table class="sortable">
+      <thead><tr><th>파일명</th><th>백업 일시</th><th>크기</th></tr></thead>
+      <tbody>
+        {% for f in files %}
+        <tr><td>{{ f.name }}</td><td>{{ f.time }}</td><td>{{ f.size_kb }} KB</td></tr>
+        {% else %}
+        <tr class="empty"><td colspan="3">백업 파일이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin:0">복원하려면: 프로그램을 끄고, 백업 파일을 프로그램 폴더의 worklog.db 로 이름을 바꿔 덮어쓴 뒤 다시 켜세요.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link with context %}
+{#
+  analysis.html - 5팀 분석현황
+  '분석중'은 [분석종료]를 누를 때까지 날짜를 넘겨도 계속 표시됩니다.
+  처음에는 내 분석만 보이고 (5팀이 아니면 전체), [전체] 또는 사람을 골라 볼 수 있습니다.
+  who (app.py 의 analysis_who) : 'me' / 'all' / 계정 번호
+#}
+{% block content %}
+{{ date_nav(url_for('analysis'), '5팀 분석현황', d, prev_d, next_d, d_label, today, {'who': who}) }}
+
+<section class="card">
+  <h2>분석 등록</h2>
+  <form method="post" action="{{ url_for('analysis_add') }}" class="form-row">
+    <input type="hidden" name="next" value="{{ here }}">
+    <label class="field">담당자
+      <select class="inp" name="manager_id">
+        {% for u in managers %}
+        <option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.grade }} {{ u.name }}{% if u.team != '5팀' %} ({{ u.team }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">시작일<input class="inp" type="date" name="start_date" value="{{ d }}"></label>
+    <label class="field">CaseNotation<input class="inp" type="text" name="case_notation" placeholder="예: AABB1010" required></label>
+    <label class="field wide">비고<input class="inp" type="text" name="note"></label>
+    <button class="btn" type="submit">분석중으로 등록</button>
+  </form>
+  <p class="muted" style="margin:0">분석중 항목은 [분석종료]를 누를 때까지 매일 업무일지에 자동으로 표시됩니다.</p>
+</section>
+
+{# 누구 것을 볼지: [내 분석] [전체] [사람 선택] — 괄호 안은 분석중 + 이 날짜 분석종료 건수 #}
+<div class="toolbar">
+  <span class="muted">보기</span>
+  <a class="btn2 {% if who == 'me' %}sel{% endif %}" href="{{ url_for('analysis', date=d, who='me') }}">내 분석 ({{ count_me }})</a>
+  <a class="btn2 {% if who == 'all' %}sel{% endif %}" href="{{ url_for('analysis', date=d, who='all') }}">전체 ({{ count_all }})</a>
+  <form method="get" action="{{ url_for('analysis') }}" class="inline">
+    <input type="hidden" name="date" value="{{ d }}">
+    <select class="inp {% if who not in ('me', 'all') %}sel{% endif %}" name="who" onchange="this.form.submit()"
+            style="width:auto" aria-label="사람 선택">
+      <option value="">사람 선택…</option>
+      {% for uid, label, n in people %}
+      <option value="{{ uid }}" {% if who == uid|string %}selected{% endif %}>{{ label }} ({{ n }})</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<section class="card">
+  <div class="card-head"><span class="chip ing" style="font-size:15px;font-weight:700">분석중</span>
+    <span class="muted">{{ ongoing|length }}건 · {{ d }} 기준</span>
+    {% if old_count %}<span class="chip old">{{ old_days }}일 넘은 건 {{ old_count }}건 — 끝났다면 [분석종료]를 눌러 주세요</span>{% endif %}
+  </div>
+  {# 건수가 많으면 표 안에서 스크롤 (머리글은 위에 고정) #}
+  <div class="scroll tall">
+    <table class="sortable">
+      <thead><tr><th>담당자</th><th>시작일</th><th>경과</th><th>CaseNotation</th><th>비고</th><th data-nosort>관리</th></tr></thead>
+      <tbody>
+        {% for a in ongoing %}
+        {% set days = elapsed_days(a.start_date, d) %}
+        <tr>
+          <td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td>
+          <td class="nw">{% if days > old_days %}<span class="chip old" title="{{ old_days }}일이 넘었습니다">{{ days }}일째</span>{% else %}{{ days }}일째{% endif %}</td>
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('analysis_finish', item_id=a.id) }}" class="inline"
+                  onsubmit="return confirm('{{ d }} 날짜로 분석종료할까요?')">
+              <input type="hidden" name="end_date" value="{{ d }}">
+              <input type="hidden" name="next" value="{{ here }}">
+              <button class="btn2 sm warn" type="submit">분석종료</button>
+            </form>
+            {{ edit_link('analysis_edit', a.id) }} {{ delete_button(url_for('analysis_delete', item_id=a.id)) }}
+          </td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="6">분석중인 건이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head"><span class="chip end" style="font-size:15px;font-weight:700">분석종료</span>
+    <span class="muted">{{ d }} 종료 {{ finished|length }}건</span></div>
+  <div class="scroll tall">
+    <table class="sortable">
+      <thead><tr><th>담당자</th><th>시작일</th><th>종료일</th><th>CaseNotation</th><th>비고</th><th data-nosort>관리</th></tr></thead>
+      <tbody>
+        {% for a in finished %}
+        <tr>
+          <td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td><td class="nw">{{ a.end_date }}</td>
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="actions">
+            {{ delete_button(url_for('analysis_reopen', item_id=a.id), '분석중으로 되돌리기') }}
+            {{ edit_link('analysis_edit', a.id) }} {{ delete_button(url_for('analysis_delete', item_id=a.id)) }}
+          </td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="6">이 날짜에 종료된 건이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

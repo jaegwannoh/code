@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{#
+  search.html - 이름/내용/전체 검색
+  결과는 페이지로 나눠서 보여줍니다 (pg = app.py 의 paginate).
+  엑셀/인쇄는 페이지와 상관없이 검색된 전체를 출력합니다.
+  표 정렬도 전체 결과 기준이라서, 머리글을 누르면 서버에서 다시 정렬합니다.
+#}
+{% block content %}
+<h1>검색</h1>
+
+<form method="get" class="card">
+  {% if request.args.size %}<input type="hidden" name="size" value="{{ request.args.size }}">{% endif %}
+  <div class="form-row">
+    <label class="field narrow">검색 기준
+      <select class="inp" name="field">
+        {% for v, label in [('all','전체'), ('name','이름'), ('content','내용')] %}
+        <option value="{{ v }}" {% if p.field == v %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field wide">검색어 (비우면 기간 안의 전체)
+      <input class="inp" type="search" name="q" value="{{ p.q }}" autofocus>
+    </label>
+    <button class="btn" type="submit">검색</button>
+  </div>
+  <div class="toolbar">
+    <span class="muted">대상</span>
+    {% for v, label in search_targets %}
+    <label class="check"><input type="checkbox" name="target" value="{{ v }}" {% if v in p.targets %}checked{% endif %}>{{ label }}</label>
+    {% endfor %}
+  </div>
+  <div class="toolbar">
+    <span class="muted">기간</span>
+    <input class="inp" type="date" name="start" value="{{ p.start }}" style="width:auto" aria-label="검색 시작일">
+    <span>~</span>
+    <input class="inp" type="date" name="end" value="{{ p.end }}" style="width:auto" aria-label="검색 종료일">
+  </div>
+</form>
+
+{% if searched %}
+<section class="card">
+  <div class="toolbar">
+    <h2 class="grow">{% if p.q %}'{{ p.q }}' {% endif %}검색 결과 <span class="muted">{{ total|comma }}건</span></h2>
+    <a class="btn2" href="{{ url_for('export_search') }}?{{ query_string }}">엑셀 다운로드 (전체)</a>
+    <a class="btn2" href="{{ url_for('print_search') }}?{{ query_string }}" target="_blank"
+       {% if total > print_warn %}onclick="return confirm('검색 결과가 {{ total|comma }}건입니다.\n인쇄 화면이 느리게 열릴 수 있어 엑셀 다운로드를 권장합니다.\n그래도 인쇄 화면을 열까요?')"{% endif %}>인쇄 (전체)</a>
+  </div>
+
+  {% if total %}
+  <div class="toolbar">
+    <span class="muted">{% for label, n in counts %}{{ label }} {{ n|comma }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+    <span class="grow"></span>
+    <span class="muted">{{ pg.first|comma }}–{{ pg.last|comma }}번째 표시 · 한 페이지에</span>
+    {% for n in page_sizes %}
+    <a class="btn2 sm {% if pg.size == n %}sel{% endif %}" href="{{ url_with(size=n, page=1) }}">{{ n }}건</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="scroll">
+    <table>
+      <thead><tr>
+        {% for key, label in columns %}
+        {# 같은 열을 다시 누르면 방향이 바뀜. 날짜는 처음에 최근 것부터, 나머지는 가나다순부터 #}
+        {% if key == sort_key %}{% set next_dir = 'asc' if sort_desc else 'desc' %}
+        {% else %}{% set next_dir = 'desc' if key == 'date' else 'asc' %}{% endif %}
+        <th class="sort-th" {% if key == sort_key %}data-dir="{{ 'desc' if sort_desc else 'asc' }}"{% endif %}>
+          <a href="{{ url_with(sort=key, dir=next_dir, page=1) }}" title="눌러서 정렬">{{ label }}</a></th>
+        {% endfor %}
+      </tr></thead>
+      <tbody>
+        {% for r in pg.rows %}
+        <tr>
+          <td class="nw"><a href="{{ url_for('index', date=r.date) }}">{{ r.date }}</a></td>
+          <td class="nw">{{ r.kind }}</td>
+          <td><span class="badge t{{ r.team[0] }}">{{ r.team }}</span></td>
+          <td class="nw">{{ r.person|highlight(p.q if p.field != 'content' else '') }}</td>
+          <td>{{ r.content|highlight(p.q if p.field != 'name' else '') }}</td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="5">검색 결과가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {# 페이지 번호: ‹ 이전  1 … 4 5 [6] 7 8 … 87  다음 › #}
+  {% if pg.pages > 1 %}
+  <nav class="pager" aria-label="페이지">
+    {% if pg.page > 1 %}<a class="btn2 sm" href="{{ url_with(page=pg.page - 1) }}">‹ 이전</a>
+    {% else %}<span class="btn2 sm off">‹ 이전</span>{% endif %}
+    {% for n in pg.numbers %}
+      {% if n is none %}<span class="gap">…</span>
+      {% elif n == pg.page %}<span class="btn2 sm sel" aria-current="page">{{ n }}</span>
+      {% else %}<a class="btn2 sm" href="{{ url_with(page=n) }}">{{ n }}</a>{% endif %}
+    {% endfor %}
+    {% if pg.page < pg.pages %}<a class="btn2 sm" href="{{ url_with(page=pg.page + 1) }}">다음 ›</a>
+    {% else %}<span class="btn2 sm off">다음 ›</span>{% endif %}
+  </nav>
+  {% endif %}
+  <p class="muted" style="margin:0">날짜를 누르면 그날 업무일지로 이동합니다. 머리글을 누르면 전체 결과를 그 열 기준으로 정렬합니다.</p>
+</section>
+{% endif %}
+{% endblock %}

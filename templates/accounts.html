@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import badge, delete_button with context %}
+{# accounts.html - 계정 추가/수정/삭제 (누구나 가능) #}
+{% block content %}
+<h1>계정 관리</h1>
+
+<section class="card">
+  <h2>계정 추가</h2>
+  <form method="post" action="{{ url_for('account_add') }}" class="form-row">
+    <input type="hidden" name="next" value="{{ here }}">
+    <label class="field narrow">순번 (ID)<input class="inp" type="text" name="seq" inputmode="numeric" required></label>
+    <label class="field narrow">소속팀
+      <select class="inp" name="team">{% for t in teams %}<option>{{ t }}</option>{% endfor %}</select>
+    </label>
+    <label class="field narrow">급수
+      <select class="inp" name="grade">{% for gr in grades %}<option {% if gr == '7급' %}selected{% endif %}>{{ gr }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">이름<input class="inp" type="text" name="name" required></label>
+    <label class="field">비밀번호<input class="inp" type="password" name="password" required></label>
+    <button class="btn" type="submit">추가</button>
+  </form>
+</section>
+
+<section class="card">
+  <div class="toolbar">
+    <h2 style="margin-right:8px">계정 목록</h2>
+    <a class="btn2 {% if not team_filter %}sel{% endif %}" href="{{ url_for('accounts') }}">전체</a>
+    {% for t in teams %}
+    <a class="btn2 {% if team_filter == t %}sel{% endif %}" href="{{ url_for('accounts', team=t) }}">{{ t }}</a>
+    {% endfor %}
+  </div>
+  <div class="scroll">
+    <table class="sortable">
+      <thead><tr><th>순번</th><th>소속팀</th><th>급수</th><th>이름</th><th>상태</th><th data-nosort>비밀번호</th><th data-nosort>관리</th></tr></thead>
+      <tbody>
+        {% for u in users %}
+        {% set gone = u.left_date and u.left_date <= today %}
+        <tr {% if gone %}class="left"{% endif %}>
+          <td>{{ u.seq }}</td><td>{{ badge(u.team) }}</td><td>{{ u.grade }}</td><td>{{ u.name }}</td>
+          <td class="nw">{% if gone %}<span class="chip end">전출/퇴직 {{ u.left_date }}</span>
+            {% elif u.left_date %}<span class="chip leave">{{ u.left_date }} 전출/퇴직 예정</span>
+            {% else %}재직{% endif %}</td>
+          <td>••••</td>
+          <td class="actions">
+            <a class="btn2 sm" href="{{ url_for('account_edit', user_id=u.id, next=here) }}">수정</a>
+            {{ delete_button(url_for('account_delete', user_id=u.id)) }}
+          </td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="7">계정이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted" style="margin:0">그만두거나 다른 곳으로 옮긴 사람은 삭제하지 말고 [수정]에서 <strong>전출/퇴직일</strong>을 넣어 주세요.
+    그날부터 작성자 선택 목록과 미제출 인원에서 빠지고, 지금까지 쓴 기록과 '내 분석' 연결은 그대로 남습니다.</p>
+</section>
+{% endblock %}

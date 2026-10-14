@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>휴가/부재 수정</h1>
+<form method="post" class="card">
+  <input type="hidden" name="next" value="{{ request.args.next or '' }}">
+  <div class="form-row">
+    <label class="field">대상자
+      <select class="inp" name="user_id">
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if u.id == item.user_id %}selected{% endif %}>{{ u.grade }} {{ u.name }} ({{ u.team }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field narrow">종류
+      <select class="inp" name="kind">
+        {% for k in leave_kinds %}<option {% if k == item.kind %}selected{% endif %}>{{ k }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">시작일<input class="inp" type="date" name="start_date" value="{{ item.start_date }}"></label>
+    <label class="field">종료일<input class="inp" type="date" name="end_date" value="{{ item.end_date }}"></label>
+  </div>
+  <label class="field">비고<input class="inp" type="text" name="note" value="{{ item.note }}"></label>
+  <div><button class="btn" type="submit">저장</button>
+    <a class="btn2" href="{{ request.args.next or url_for('leave') }}">취소</a></div>
+</form>
+{% endblock %}

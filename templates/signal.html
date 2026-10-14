@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link with context %}
+{# signal.html - 3팀 신규 신호처리 입력·관리 + 위성 목록 관리 #}
+{% block content %}
+{{ date_nav(url_for('signal'), '3팀 신규 신호처리', d, prev_d, next_d, d_label, today) }}
+
+<div class="cols">
+  <div class="main" style="display:flex;flex-direction:column;gap:20px">
+    <section class="card">
+      <h2>신호처리 입력</h2>
+      <form method="post" action="{{ url_for('signal_add') }}" class="form-row">
+        <input type="hidden" name="work_date" value="{{ d }}">
+        <input type="hidden" name="next" value="{{ here }}">
+        <label class="field">작성자 (급수·이름 자동)
+          <select class="inp" name="user_id">
+            {% for u in members %}
+            <option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.grade }} {{ u.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field">위성명
+          <select class="inp" name="satellite" required>
+            {% for s in satellites %}<option>{{ s.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="field">CaseNotation
+          <input class="inp" type="text" name="case_notation" placeholder="예: AABB1010" required>
+        </label>
+        <button class="btn" type="submit">추가</button>
+      </form>
+      {% if not satellites %}<p class="muted">오른쪽 '위성 목록 관리'에서 위성을 먼저 추가하세요.</p>{% endif %}
+    </section>
+
+    <section class="card">
+      <div class="card-head">{{ badge('3팀') }}<h2>{{ d }} 처리 목록</h2><span class="muted">{{ signals|length }}건</span></div>
+      <div class="scroll">
+        <table class="sortable">
+          <thead><tr><th>No</th><th>급수</th><th>이름</th><th>위성명</th><th>CaseNotation</th><th data-nosort>관리</th></tr></thead>
+          <tbody>
+            {% for s in signals %}
+            <tr>
+              <td>{{ loop.index }}</td><td>{{ s.grade }}</td><td>{{ s.name }}</td>
+              <td>{{ s.satellite }}</td><td>{{ s.case_notation }}</td>
+              <td class="actions">{{ edit_link('signal_edit', s.id) }} {{ delete_button(url_for('signal_delete', item_id=s.id)) }}</td>
+            </tr>
+            {% else %}
+            <tr class="empty"><td colspan="6">등록된 신호처리가 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <aside class="card side">
+    <h2>위성 목록 관리</h2>
+    <p class="muted" style="margin:0">여기서 추가한 위성이 입력칸 목록에 나타납니다.</p>
+    <form method="post" action="{{ url_for('satellite_add') }}" style="display:flex;gap:8px">
+      <input type="hidden" name="next" value="{{ here }}">
+      <input class="inp" type="text" name="name" placeholder="새 위성명" aria-label="새 위성명" required>
+      <button class="btn" type="submit">추가</button>
+    </form>
+    <table>
+      <tbody>
+        {% for s in satellites %}
+        <tr><td>{{ s.name }}</td><td class="actions" style="text-align:right">{{ delete_button(url_for('satellite_delete', item_id=s.id)) }}</td></tr>
+        {% else %}
+        <tr class="empty"><td colspan="2">위성이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </aside>
+</div>
+{% endblock %}

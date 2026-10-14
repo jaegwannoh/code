@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>일일업무 수정</h1>
+<form method="post" class="card">
+  <input type="hidden" name="next" value="{{ request.args.next or '' }}">
+  <div class="form-row">
+    <label class="field">날짜<input class="inp" type="date" name="work_date" value="{{ item.work_date }}"></label>
+    <label class="field">작성자
+      <select class="inp" name="user_id">
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if u.id == item.user_id %}selected{% endif %}>{{ u.team }} {{ u.grade }} {{ u.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label class="field">업무 내용<input class="inp" type="text" name="title" value="{{ item.title }}" required></label>
+  <label class="field">세부 내용<textarea class="inp" name="detail">{{ item.detail }}</textarea></label>
+  <div><button class="btn" type="submit">저장</button>
+    <a class="btn2" href="{{ request.args.next or url_for('index') }}">취소</a></div>
+</form>
+{% endblock %}

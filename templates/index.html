@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import date_nav, badge, missing_box with context %}
+{#
+  index.html - 업무일지 메인: 하루 전체를 한눈에 (보기 전용)
+  입력/수정은 각 화면의 '입력/관리 →' 로 이동해서 합니다.
+#}
+{% block content %}
+{{ date_nav(url_for('index'), '업무일지', d, prev_d, next_d, d_label, today) }}
+
+<section class="leave-strip">
+  <strong>휴가/부재</strong>
+  {% for l in data.leaves %}
+  <span>{{ l.kind }} · {{ l.grade }} {{ l.name }} ({{ l.team }}{% if l.start_date != l.end_date %}, {{ l.start_date[5:] }}~{{ l.end_date[5:] }}{% endif %})</span>
+  {% else %}
+  <span class="muted">없음</span>
+  {% endfor %}
+  <a href="{{ url_for('leave') }}">관리 →</a>
+</section>
+
+{# 팀별 일일업무 #}
+<div class="cols">
+  {% for t in teams %}
+  {% set td = data.teams[t] %}
+  <section class="card">
+    <div class="card-head">
+      {{ badge(t) }}<h2>일일업무</h2><span class="muted">{{ td.works|length }}건</span>
+      <span class="grow"></span>
+      <a href="{{ url_for('daily_team', team=t[0], date=d) }}">입력/관리 →</a>
+    </div>
+    {{ missing_box(td.missing) }}
+    <div class="scroll">
+      <table class="sortable">
+        <thead><tr><th>작성자</th><th>업무내용</th><th>세부내용</th></tr></thead>
+        <tbody>
+          {% for w in td.works %}
+          <tr><td class="nw">{{ w.grade }} {{ w.name }}</td><td>{{ w.title }}</td><td class="detail">{{ w.detail }}</td></tr>
+          {% else %}
+          <tr class="empty"><td colspan="3">등록된 업무가 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endfor %}
+</div>
+
+{# 부가업무 #}
+<div class="cols">
+  <section class="card">
+    <div class="card-head">
+      {{ badge('3팀') }}<h2>신규 신호처리</h2><span class="muted">{{ data.signals|length }}건</span>
+      <span class="grow"></span>
+      <a href="{{ url_for('signal', date=d) }}">입력/관리 →</a>
+    </div>
+    <div class="scroll">
+      <table class="sortable">
+        <thead><tr><th>급수</th><th>이름</th><th>위성명</th><th>CaseNotation</th></tr></thead>
+        <tbody>
+          {% for s in data.signals %}
+          <tr><td>{{ s.grade }}</td><td>{{ s.name }}</td><td>{{ s.satellite }}</td><td>{{ s.case_notation }}</td></tr>
+          {% else %}
+          <tr class="empty"><td colspan="4">등록된 신호처리가 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      {{ badge('5팀') }}<h2>분석현황</h2>
+      <span class="muted">분석중 {{ data.ongoing|length }}건 · 분석종료 {{ data.finished|length }}건</span>
+      <span class="grow"></span>
+      <a href="{{ url_for('analysis', date=d) }}">입력/관리 →</a>
+    </div>
+    {# 전체 분석 건을 다 보여주되, 많으면 표 안에서 스크롤 #}
+    <div class="scroll tall">
+      <table class="sortable">
+        <thead><tr><th>상태</th><th>담당자</th><th>시작일</th><th>CaseNotation</th><th>비고</th></tr></thead>
+        <tbody>
+          {% for a in data.ongoing %}
+          <tr><td><span class="chip ing">분석중</span></td><td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td><td>{{ a.case_notation }}</td><td>{{ a.note }}</td></tr>
+          {% endfor %}
+          {% for a in data.finished %}
+          <tr><td><span class="chip end">분석종료</span></td><td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td><td>{{ a.case_notation }}</td><td>{{ a.note }}</td></tr>
+          {% endfor %}
+          {% if not data.ongoing and not data.finished %}
+          <tr class="empty"><td colspan="5">분석 건이 없습니다.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

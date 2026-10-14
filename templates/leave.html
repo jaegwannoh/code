@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import delete_button, edit_link with context %}
+{# leave.html - 휴가/부재 등록·목록 #}
+{% block content %}
+<h1>휴가/부재</h1>
+
+<section class="card">
+  <h2>등록</h2>
+  <form method="post" action="{{ url_for('leave_add') }}" class="form-row">
+    <input type="hidden" name="next" value="{{ here }}">
+    <label class="field">대상자
+      <select class="inp" name="user_id">
+        {% for u in users %}
+        <option value="{{ u.id }}" {% if u.id == g.user.id %}selected{% endif %}>{{ u.grade }} {{ u.name }} ({{ u.team }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field narrow">종류
+      <select class="inp" name="kind">{% for k in leave_kinds %}<option>{{ k }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">시작일<input class="inp" type="date" name="start_date" value="{{ today }}"></label>
+    <label class="field">종료일<input class="inp" type="date" name="end_date" value="{{ today }}"></label>
+    <label class="field wide">비고<input class="inp" type="text" name="note" placeholder="예: 오전 반차"></label>
+    <button class="btn" type="submit">등록</button>
+  </form>
+  <p class="muted" style="margin:0">등록된 휴가/부재는 해당 기간 업무일지 상단에 표시되고, 미제출 인원에서 빠집니다.</p>
+</section>
+
+<section class="card">
+  <form method="get" class="toolbar">
+    <h2 class="grow">등록 목록</h2>
+    <label class="muted">기간</label>
+    <input class="inp" type="date" name="start" value="{{ start }}" style="width:auto" aria-label="조회 시작일">
+    <span>~</span>
+    <input class="inp" type="date" name="end" value="{{ end }}" style="width:auto" aria-label="조회 종료일">
+    <button class="btn2" type="submit">조회</button>
+  </form>
+  <div class="scroll">
+    <table class="sortable">
+      <thead><tr><th>대상자</th><th>팀</th><th>종류</th><th>시작일</th><th>종료일</th><th>일수</th><th>비고</th><th data-nosort>관리</th></tr></thead>
+      <tbody>
+        {% for l in items %}
+        <tr>
+          <td class="nw">{{ l.grade }} {{ l.name }}</td><td>{{ l.team }}</td>
+          <td><span class="chip leave">{{ l.kind }}</span></td>
+          <td class="nw">{{ l.start_date }}</td><td class="nw">{{ l.end_date }}</td>
+          <td>{{ l.days }}일</td><td>{{ l.note }}</td>
+          <td class="actions">{{ edit_link('leave_edit', l.id) }} {{ delete_button(url_for('leave_delete', item_id=l.id)) }}</td>
+        </tr>
+        {% else %}
+        <tr class="empty"><td colspan="8">이 기간에 등록된 휴가/부재가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

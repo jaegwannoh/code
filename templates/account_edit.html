@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1>계정 수정</h1>
+<form method="post" class="card">
+  <input type="hidden" name="next" value="{{ request.args.next or '' }}">
+  <div class="form-row">
+    <label class="field narrow">순번 (ID)<input class="inp" type="text" name="seq" value="{{ user.seq }}" required></label>
+    <label class="field narrow">소속팀
+      <select class="inp" name="team">{% for t in teams %}<option {% if t == user.team %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+    </label>
+    <label class="field narrow">급수
+      <select class="inp" name="grade">{% for gr in grades %}<option {% if gr == user.grade %}selected{% endif %}>{{ gr }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">이름<input class="inp" type="text" name="name" value="{{ user.name }}" required></label>
+    <label class="field">새 비밀번호 (비우면 그대로)<input class="inp" type="password" name="password"></label>
+    <label class="field">전출/퇴직일 (재직 중이면 비워 두기)<input class="inp" type="date" name="left_date" value="{{ user.left_date or '' }}"></label>
+  </div>
+  <p class="muted" style="margin:0">전출/퇴직일을 넣으면 그날부터 로그인, 작성자 선택 목록, 미제출 인원에서 빠집니다. 다시 비우면 원래대로 돌아옵니다.</p>
+  <p class="muted" style="margin:0">급수·이름을 바꿔도 이미 작성된 업무 기록은 작성 당시 정보로 남습니다.</p>
+  <div><button class="btn" type="submit">저장</button>
+    <a class="btn2" href="{{ request.args.next or url_for('accounts') }}">취소</a></div>
+</form>
+{% endblock %}
