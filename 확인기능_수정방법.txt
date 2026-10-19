@@ -1,0 +1,1037 @@
+======================================================================
+ Daily Work 확인 기능 추가 - 직접 수정용 정리
+ (3팀 신호처리 확인 / 5팀 분석현황 시작확인·종료확인 / 홈 화면 배지)
+ 작성일: 2026-10-19
+======================================================================
+
+이 문서대로 고친 코드는 이 PC에서 실제로 돌려 보고 테스트를 통과했습니다.
+(맨 아래 [테스트 결과] 참고)
+
+
+----------------------------------------------------------------------
+ 0. 먼저 읽어 주세요
+----------------------------------------------------------------------
+
+[수정할 파일 7개 - 이 순서대로 고치세요]
+  1) db.py
+  2) app.py
+  3) templates/_macros.html
+  4) templates/signal.html
+  5) templates/analysis.html
+  6) templates/index.html
+  7) static/style.css
+  8) 다 고친 뒤: 서버 끄기 → worklog.db 삭제 → 서버 다시 켜기
+     (새 구조의 DB 가 자동으로 만들어집니다. upgrade() 는 고치지 않습니다)
+
+[읽는 법]
+  - "위치" 의 줄 번호는 "수정 전 원래 파일" 기준입니다.
+    위에서부터 고치면 아래 줄 번호가 밀리므로, 줄 번호보다
+    "찾을 문구" 로 찾으세요. (메모장/에디터에서 Ctrl+F)
+  - [기존] 블록을 찾아서 [변경] 블록으로 바꾸면 됩니다.
+  - [추가] 블록은 기존 줄은 그대로 두고 새로 넣는 것입니다.
+  - 들여쓰기(공백 수)가 중요합니다. 특히 .py 파일은 공백 4칸 단위입니다.
+    탭(Tab) 키 대신 스페이스로 맞추세요.
+  - 블록 위아래의 "-----8<-----" 줄은 구분선이니 입력하지 마세요.
+
+[동작 규칙 요약]
+  - 확인 여부는 "확인자 이름" 칸 하나로 저장합니다. 비어 있으면 미확인.
+    (확인 시각은 저장하지 않습니다)
+  - 확인은 로그인한 누구나 할 수 있습니다.
+  - [미확인 전체 확인] 은 "지금 화면에 보이는 미확인 행" 만 처리합니다.
+    → 화면을 보고 있는 사이 다른 사람이 추가한 건은 확인되지 않습니다.
+    → 그 사이 다른 사람이 먼저 확인한 건은 건너뜁니다 (확인자 덮어쓰지 않음).
+  - 신호처리를 수정하면 확인이 풀립니다.
+  - 분석현황을 수정하면 시작확인/종료확인 둘 다 풀립니다.
+  - [분석중으로 되돌리기] 를 누르면 종료확인이 풀립니다 (시작확인은 유지).
+  - 신호처리 화면 위에 "다른 날짜 미확인 N건" 알림이 날짜 링크로 나옵니다.
+  - 분석현황 전체 확인 버튼에는 지금 보기 이름이 붙습니다.
+      예) [미확인 2건 확인 (내 분석)]  [미확인 7건 확인 (전체)]
+          [미확인 3건 확인 (8급 박다)]
+    필터 중이면 옆에 "전체 보기에는 미확인 N건 →" 링크가 나오고,
+    확인창에도 "[보기: 내 분석] 분석중 미확인 2건을 확인 처리할까요?" 로 나옵니다.
+  - 홈 화면 카드 제목 옆에 미확인 건수가 빨간 배지로 나옵니다.
+  - 인쇄/엑셀은 바뀌지 않습니다.
+
+
+======================================================================
+ 1. db.py
+======================================================================
+
+----------------------------------------------------------------------
+ 1-1. signals 테이블에 checked_by 칸 추가
+----------------------------------------------------------------------
+위치: 약 59~67행
+찾을 문구: CREATE TABLE IF NOT EXISTS signals
+
+[기존]
+-----8<-----
+    satellite     TEXT NOT NULL,
+    case_notation TEXT NOT NULL
+);
+-----8<-----
+
+[변경]  ※ case_notation 줄 끝에 쉼표(,)가 붙는 것 주의
+-----8<-----
+    satellite     TEXT NOT NULL,
+    case_notation TEXT NOT NULL,
+    checked_by    TEXT                  -- 확인자 (예: '6급 홍길동'). 비어 있으면(NULL) 미확인
+);
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 1-2. analyses 테이블에 start_checked_by, end_checked_by 칸 추가
+----------------------------------------------------------------------
+위치: 약 75~85행
+찾을 문구: CREATE TABLE IF NOT EXISTS analyses
+
+[기존]
+-----8<-----
+--   end_date 가 비어 있으면(NULL) '분석중', 값이 있으면 그날 '분석종료'
+CREATE TABLE IF NOT EXISTS analyses (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    manager       TEXT NOT NULL,        -- 담당자 (예: '6급 최지훈'). 등록 당시 급수/이름
+    manager_id    INTEGER,              -- 담당자 계정 번호 (users.id). '내 분석' 을 찾을 때 사용
+    start_date    TEXT NOT NULL,
+    end_date      TEXT,
+    case_notation TEXT NOT NULL,
+    note          TEXT NOT NULL DEFAULT ''
+);
+-----8<-----
+
+[변경]  ※ note 줄 끝에 쉼표(,)가 붙는 것 주의
+        ※ 칸 정렬(공백 수)은 맞추지 않아도 동작에는 상관없습니다.
+-----8<-----
+--   end_date 가 비어 있으면(NULL) '분석중', 값이 있으면 그날 '분석종료'
+--   start_checked_by / end_checked_by : 등록(시작) 확인자 / 종료 확인자. 비어 있으면 미확인
+CREATE TABLE IF NOT EXISTS analyses (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    manager          TEXT NOT NULL,        -- 담당자 (예: '6급 최지훈'). 등록 당시 급수/이름
+    manager_id       INTEGER,              -- 담당자 계정 번호 (users.id). '내 분석' 을 찾을 때 사용
+    start_date       TEXT NOT NULL,
+    end_date         TEXT,
+    case_notation    TEXT NOT NULL,
+    note             TEXT NOT NULL DEFAULT '',
+    start_checked_by TEXT,                 -- 시작확인 한 사람
+    end_checked_by   TEXT                  -- 종료확인 한 사람
+);
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 1-3. check_rows 함수 추가 (확인 처리 - 신호처리/분석현황 공용)
+----------------------------------------------------------------------
+위치: 약 212행 다음
+찾을 문구: def execute(sql, args=()):
+         이 함수 끝 (return cur.lastrowid) 바로 아래에 빈 줄 2개 + 아래 내용
+
+[추가]
+-----8<-----
+
+
+def check_rows(table, column, ids, checker):
+    """
+    ids 행 중 아직 미확인(column 이 NULL)인 행에만 확인자(checker)를 적습니다.
+    이미 다른 사람이 확인한 행은 그대로 둡니다. 실제로 확인한 건수를 돌려줍니다.
+    table, column 은 프로그램 안에서 정해진 값만 넣습니다. (화면에서 받은 값 금지)
+    """
+    conn = get_db()
+    done = 0
+    # SQLite 는 ? 를 한 번에 999개까지만 받아서 500개씩 나눠서 처리합니다.
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        marks = ','.join('?' * len(part))          # '?,?,?'
+        cur = conn.execute('UPDATE {0} SET {1}=? WHERE {1} IS NULL AND id IN ({2})'
+                           .format(table, column, marks), [checker] + part)
+        done += cur.rowcount
+    conn.commit()
+    return done
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 1-4. signals_unchecked_dates 함수 추가 (다른 날짜 미확인 조회)
+----------------------------------------------------------------------
+위치: 약 316행 다음
+찾을 문구: def signals_on(d):
+         이 함수(2줄) 바로 아래에 빈 줄 2개 + 아래 내용
+
+[추가]
+-----8<-----
+
+
+def signals_unchecked_dates(d):
+    """d 가 아닌 날짜에 남아 있는 미확인 신호처리: 날짜별 건수 (최근 날짜가 위로)"""
+    return query('SELECT work_date, COUNT(*) AS n FROM signals '
+                 'WHERE checked_by IS NULL AND work_date<>? '
+                 'GROUP BY work_date ORDER BY work_date DESC', (d,))
+-----8<-----
+
+  참고: '지난 날짜' 가 아니라 '보고 있는 날짜가 아닌 모든 날짜' 를 찾습니다.
+        예전 날짜를 보고 있을 때도 그 뒤 날짜의 미확인이 숨지 않게 하려고요.
+
+
+======================================================================
+ 2. app.py
+======================================================================
+
+----------------------------------------------------------------------
+ 2-1. 공통 도우미 함수 2개 추가 (checker, form_ids)
+----------------------------------------------------------------------
+위치: 약 107행 다음
+찾을 문구: def form_text(name):
+         이 함수(3줄) 바로 아래, def query_string(): 위
+
+[추가]
+-----8<-----
+
+
+def checker():
+    """확인자 이름: 지금 로그인한 사람의 '급수 이름' (예: '6급 홍길동')"""
+    return '{} {}'.format(g.user['grade'], g.user['name'])
+
+
+def form_ids():
+    """[전체 확인] 폼으로 넘어온 id 목록. 숫자가 아닌 값은 버립니다."""
+    return [int(i) for i in request.form.getlist('ids') if i.isdigit()]
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 2-2. index() - 홈 화면 미확인 건수 계산
+----------------------------------------------------------------------
+위치: 약 297~301행
+찾을 문구: def index():
+
+[기존]
+-----8<-----
+def index():
+    ctx = date_context()
+    return render_template('index.html', active='index', data=collect_day(ctx['d']), **ctx)
+-----8<-----
+
+[변경]
+-----8<-----
+def index():
+    ctx = date_context()
+    data = collect_day(ctx['d'])
+    # 홈 화면 미확인 배지용 건수
+    unchecked = {
+        'signal': len([s for s in data['signals'] if not s['checked_by']]),
+        'start': len([a for a in data['ongoing'] if not a['start_checked_by']]),
+        'end': len([a for a in data['finished'] if not a['end_checked_by']]),
+    }
+    return render_template('index.html', active='index', data=data, unchecked=unchecked, **ctx)
+-----8<-----
+
+  참고: collect_day() 는 엑셀/인쇄도 같이 쓰므로 고치지 않습니다.
+
+
+----------------------------------------------------------------------
+ 2-3. signal() - 미확인 id 목록, 다른 날짜 미확인 넘기기
+----------------------------------------------------------------------
+위치: 약 365~371행
+찾을 문구: def signal():
+
+[기존]
+-----8<-----
+    members = db.users_by_team('3팀') or db.all_users()
+    return render_template('signal.html', active='signal', members=members,
+                           satellites=db.satellites(), signals=db.signals_on(ctx['d']), **ctx)
+-----8<-----
+
+[변경]
+-----8<-----
+    members = db.users_by_team('3팀') or db.all_users()
+    signals = db.signals_on(ctx['d'])
+    # [미확인 전체 확인] 버튼이 처리할 대상 = 지금 화면에 보이는 미확인 건
+    # [Py2.7 차이] 옛 Jinja2 에는 rejectattr 가 없을 수 있어서 여기서 만듭니다.
+    unchecked_ids = [s['id'] for s in signals if not s['checked_by']]
+    # 다른 날짜에 남아 있는 미확인 건 (페이지 위 알림)
+    other_dates = db.signals_unchecked_dates(ctx['d'])
+    other_count = sum(r['n'] for r in other_dates)
+    return render_template('signal.html', active='signal', members=members,
+                           satellites=db.satellites(), signals=signals,
+                           unchecked_ids=unchecked_ids, other_dates=other_dates,
+                           other_count=other_count, **ctx)
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 2-4. signal_edit() - 수정하면 확인 해제
+----------------------------------------------------------------------
+위치: 약 403행
+찾을 문구: db.execute('UPDATE signals SET work_date=?
+
+[기존]
+-----8<-----
+            db.execute('UPDATE signals SET work_date=?, user_id=?, grade=?, name=?, satellite=?, '
+                       'case_notation=? WHERE id=?',
+-----8<-----
+
+[변경]  ※ 그 아래 괄호 안 값 2줄은 그대로 둡니다.
+-----8<-----
+            # 내용이 바뀌었을 수 있으니 확인을 풀어서 다시 확인받게 합니다.
+            db.execute('UPDATE signals SET work_date=?, user_id=?, grade=?, name=?, satellite=?, '
+                       'case_notation=?, checked_by=NULL WHERE id=?',
+-----8<-----
+
+  참고: 내용을 바꾸지 않고 [저장] 만 눌러도 확인이 풀립니다.
+
+
+----------------------------------------------------------------------
+ 2-5. 신호처리 확인 라우트 3개 추가
+----------------------------------------------------------------------
+위치: 약 419행 다음
+찾을 문구: def signal_delete(item_id):
+         이 함수 끝 (return go_back('signal')) 바로 아래,
+         @app.route('/satellite/add' ... 위
+
+[추가]
+-----8<-----
+
+
+@app.route('/signal/<int:item_id>/check', methods=['POST'])
+@login_required
+def signal_check(item_id):
+    """[확인] 버튼: 한 건 확인"""
+    db.check_rows('signals', 'checked_by', [item_id], checker())
+    return go_back('signal')
+
+
+@app.route('/signal/<int:item_id>/uncheck', methods=['POST'])
+@login_required
+def signal_uncheck(item_id):
+    """[확인취소] 버튼"""
+    db.execute('UPDATE signals SET checked_by=NULL WHERE id=?', (item_id,))
+    return go_back('signal')
+
+
+@app.route('/signal/check-all', methods=['POST'])
+@login_required
+def signal_check_all():
+    """[미확인 전체 확인] 버튼: 화면에 보이던 미확인 건(ids)만 확인"""
+    n = db.check_rows('signals', 'checked_by', form_ids(), checker())
+    flash('{}건 확인했습니다.'.format(n))
+    return go_back('signal')
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 2-6. analysis() - 확인용 값 추가 (두 군데)
+----------------------------------------------------------------------
+위치: 약 471~496행
+찾을 문구: def analysis():
+
+(1) people = [...] 2줄과 who = analysis_who() 사이에 4줄을 넣습니다.
+
+[기존]
+-----8<-----
+    people = [(u['id'], '{} {}'.format(u['grade'], u['name']), counts[u['id']])
+              for u in manager_options()]
+
+    who = analysis_who()
+-----8<-----
+
+[변경]
+-----8<-----
+    people = [(u['id'], '{} {}'.format(u['grade'], u['name']), counts[u['id']])
+              for u in manager_options()]
+
+    # [확인] 전체 보기 기준 미확인 건수 (필터 중일 때 '전체 보기에는 미확인 N건' 안내)
+    all_start_unchecked = len([a for a in ongoing if not a['start_checked_by']])
+    all_end_unchecked = len([a for a in finished if not a['end_checked_by']])
+
+    who = analysis_who()
+-----8<-----
+
+  ※ 반드시 who 필터(if who != 'all': ...) 보다 위에 있어야 합니다.
+     필터 전의 전체 건수를 세는 것이기 때문입니다.
+
+(2) old_count 계산 다음 ~ return 까지를 바꿉니다.
+
+[기존]
+-----8<-----
+                     if elapsed_days(a['start_date'], ctx['d']) > OLD_ANALYSIS_DAYS])
+
+    return render_template('analysis.html', active='analysis', managers=manager_options(),
+                           ongoing=ongoing, finished=finished, who=who, people=people,
+                           count_me=counts[g.user['id']], count_all=sum(counts.values()),
+                           old_count=old_count, **ctx)
+-----8<-----
+
+[변경]
+-----8<-----
+                     if elapsed_days(a['start_date'], ctx['d']) > OLD_ANALYSIS_DAYS])
+
+    # [확인] 지금 보기에서 [미확인 전체 확인] 이 처리할 대상
+    start_ids = [a['id'] for a in ongoing if not a['start_checked_by']]
+    end_ids = [a['id'] for a in finished if not a['end_checked_by']]
+    # [확인] 버튼과 확인창에 적을 보기 이름
+    if who == 'me':
+        who_label = '내 분석'
+    elif who == 'all':
+        who_label = '전체'
+    else:
+        who_label = next((label for uid, label, n in people if uid == int(who)), '선택한 사람')
+
+    return render_template('analysis.html', active='analysis', managers=manager_options(),
+                           ongoing=ongoing, finished=finished, who=who, people=people,
+                           count_me=counts[g.user['id']], count_all=sum(counts.values()),
+                           old_count=old_count,
+                           start_ids=start_ids, end_ids=end_ids, who_label=who_label,
+                           all_start_unchecked=all_start_unchecked,
+                           all_end_unchecked=all_end_unchecked, **ctx)
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 2-7. analysis_finish() - 종료할 때 종료확인 비우기
+----------------------------------------------------------------------
+위치: 약 522행
+찾을 문구: db.execute('UPDATE analyses SET end_date=? WHERE id=?', (end, item_id))
+
+[기존]
+-----8<-----
+            db.execute('UPDATE analyses SET end_date=? WHERE id=?', (end, item_id))
+-----8<-----
+
+[변경]
+-----8<-----
+            db.execute('UPDATE analyses SET end_date=?, end_checked_by=NULL WHERE id=?',
+                       (end, item_id))
+-----8<-----
+
+  참고: 되돌렸다가 다시 종료하는 경우를 위한 안전장치입니다.
+
+
+----------------------------------------------------------------------
+ 2-8. analysis_reopen() - 되돌리면 종료확인 해제
+----------------------------------------------------------------------
+위치: 약 528~531행
+찾을 문구: def analysis_reopen(item_id):
+
+[기존]
+-----8<-----
+    """[분석중으로 되돌리기] 버튼: 종료일 지우기"""
+    db.execute('UPDATE analyses SET end_date=NULL WHERE id=?', (item_id,))
+    return go_back('analysis')
+-----8<-----
+
+[변경]
+-----8<-----
+    """[분석중으로 되돌리기] 버튼: 종료일과 종료확인 지우기"""
+    db.execute('UPDATE analyses SET end_date=NULL, end_checked_by=NULL WHERE id=?', (item_id,))
+    return go_back('analysis')
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 2-9. 분석현황 확인 라우트 3개 + 도우미 추가
+----------------------------------------------------------------------
+위치: 약 531행 다음
+찾을 문구: 바로 위 2-8 의 analysis_reopen 함수 끝 (return go_back('analysis')) 아래,
+         @app.route('/analysis/<int:item_id>/edit' ... 위
+
+[추가]
+-----8<-----
+
+
+# 분석현황 확인 칸: 주소의 kind → DB 칸 이름 (이 두 개 말고는 404)
+CHECK_COLUMNS = {'start': 'start_checked_by', 'end': 'end_checked_by'}
+CHECK_NAMES = {'start': '분석중', 'end': '분석종료'}
+
+
+def check_column(kind):
+    if kind not in CHECK_COLUMNS:
+        abort(404)
+    return CHECK_COLUMNS[kind]
+
+
+@app.route('/analysis/<int:item_id>/check/<kind>', methods=['POST'])
+@login_required
+def analysis_check(item_id, kind):
+    """[확인] 버튼: kind='start' 시작확인 / 'end' 종료확인"""
+    db.check_rows('analyses', check_column(kind), [item_id], checker())
+    return go_back('analysis')
+
+
+@app.route('/analysis/<int:item_id>/uncheck/<kind>', methods=['POST'])
+@login_required
+def analysis_uncheck(item_id, kind):
+    """[확인취소] 버튼"""
+    db.execute('UPDATE analyses SET {}=NULL WHERE id=?'.format(check_column(kind)), (item_id,))
+    return go_back('analysis')
+
+
+@app.route('/analysis/check-all/<kind>', methods=['POST'])
+@login_required
+def analysis_check_all(kind):
+    """[미확인 전체 확인] 버튼: 화면에 보이던 미확인 건(ids)만 확인"""
+    n = db.check_rows('analyses', check_column(kind), form_ids(), checker())
+    flash('{} {}건 확인했습니다.'.format(CHECK_NAMES[kind], n))
+    return go_back('analysis')
+-----8<-----
+
+  참고: 확인 후에도 보던 보기(내 분석/전체/사람)가 유지됩니다.
+        폼의 next 에 현재 주소(?who=...)가 들어가기 때문입니다.
+
+
+----------------------------------------------------------------------
+ 2-10. analysis_edit() - 수정하면 시작확인/종료확인 모두 해제
+----------------------------------------------------------------------
+위치: 약 554행
+찾을 문구: db.execute('UPDATE analyses SET manager=?
+
+[기존]
+-----8<-----
+            db.execute('UPDATE analyses SET manager=?, manager_id=?, start_date=?, end_date=?, '
+                       'case_notation=?, note=? WHERE id=?',
+                       (manager, manager_id, start, end, case, form_text('note'), item_id))
+-----8<-----
+
+[변경]
+-----8<-----
+            # 내용이 바뀌었을 수 있으니 시작확인/종료확인을 모두 풉니다.
+            db.execute('UPDATE analyses SET manager=?, manager_id=?, start_date=?, end_date=?, '
+                       'case_notation=?, note=?, start_checked_by=NULL, end_checked_by=NULL '
+                       'WHERE id=?',
+                       (manager, manager_id, start, end, case, form_text('note'), item_id))
+-----8<-----
+
+
+======================================================================
+ 3. templates/_macros.html
+======================================================================
+
+----------------------------------------------------------------------
+ 3-1. check_cell 매크로 추가 (확인 칸 모양 - 두 화면 공용)
+----------------------------------------------------------------------
+위치: 파일 맨 아래 (edit_link 매크로의 {% endmacro %} 다음)
+
+[추가]
+-----8<-----
+
+{# 확인 칸: 미확인이면 [확인] 버튼, 확인됐으면 '✔ 확인자' + [취소] #}
+{% macro check_cell(checked_by, check_url, uncheck_url) %}
+{% if checked_by %}
+<span class="chip chk">✔ {{ checked_by }}</span>
+<form method="post" action="{{ uncheck_url }}" class="inline" onsubmit="return confirm('확인을 취소할까요?')">
+  <input type="hidden" name="next" value="{{ here }}">
+  <button class="btn2 sm" type="submit">취소</button>
+</form>
+{% else %}
+<form method="post" action="{{ check_url }}" class="inline">
+  <input type="hidden" name="next" value="{{ here }}">
+  <button class="btn2 sm chk" type="submit">확인</button>
+</form>
+{% endif %}
+{% endmacro %}
+-----8<-----
+
+  ※ ✔ 기호가 입력하기 어려우면 V 나 [O] 로 바꿔도 됩니다.
+  ※ 파일은 UTF-8 로 저장하세요. (메모장: 다른 이름으로 저장 → 인코딩 UTF-8)
+
+
+======================================================================
+ 4. templates/signal.html
+======================================================================
+
+----------------------------------------------------------------------
+ 4-1. 맨 위 import 줄 (2행) - check_cell 추가
+----------------------------------------------------------------------
+[기존]
+-----8<-----
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link with context %}
+-----8<-----
+
+[변경]
+-----8<-----
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link, check_cell with context %}
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 4-2. 다른 날짜 미확인 알림 추가
+----------------------------------------------------------------------
+위치: 5행 {{ date_nav(url_for('signal'), ...) }} 줄 바로 아래,
+      <div class="cols"> 위
+
+[추가]
+-----8<-----
+
+{# 다른 날짜에 남아 있는 미확인 신호처리 (누르면 그 날짜로 이동) #}
+{% if other_count %}
+<div class="notice">
+  <strong>다른 날짜 미확인 {{ other_count }}건</strong>
+  {% for r in other_dates[:10] %}
+  <a href="{{ url_for('signal', date=r.work_date) }}">{{ r.work_date[5:] }} ({{ r.n }}건)</a>
+  {% endfor %}
+  {% if other_dates|length > 10 %}<span class="muted">외 {{ other_dates|length - 10 }}일</span>{% endif %}
+</div>
+{% endif %}
+-----8<-----
+
+  참고: 날짜는 최근 것부터 10개까지 링크로 보여 주고, 나머지는 '외 N일' 로 표시합니다.
+
+
+----------------------------------------------------------------------
+ 4-3. 처리 목록 카드 머리 - 미확인 건수 + [미확인 전체 확인] 버튼
+----------------------------------------------------------------------
+위치: 약 35행
+찾을 문구: <h2>{{ d }} 처리 목록</h2>
+
+[기존]  (한 줄)
+-----8<-----
+      <div class="card-head">{{ badge('3팀') }}<h2>{{ d }} 처리 목록</h2><span class="muted">{{ signals|length }}건</span></div>
+-----8<-----
+
+[변경]  ※ 맨 끝의 </div> 가 아래로 내려갑니다.
+-----8<-----
+      <div class="card-head">{{ badge('3팀') }}<h2>{{ d }} 처리 목록</h2><span class="muted">{{ signals|length }}건</span>
+        {% if unchecked_ids %}
+        <span class="chip old">미확인 {{ unchecked_ids|length }}건</span>
+        <span class="grow"></span>
+        {# 화면에 보이는 미확인 건의 id 만 보냅니다 → 보는 사이 추가된 건은 확인되지 않음 #}
+        <form method="post" action="{{ url_for('signal_check_all') }}" class="inline"
+              onsubmit="return confirm('{{ d }} 미확인 {{ unchecked_ids|length }}건을 확인 처리할까요?\n(지금 화면에 보이는 건만 처리됩니다)')">
+          {% for i in unchecked_ids %}<input type="hidden" name="ids" value="{{ i }}">{% endfor %}
+          <input type="hidden" name="next" value="{{ here }}">
+          <button class="btn" type="submit">미확인 전체 확인</button>
+        </form>
+        {% elif signals %}
+        <span class="ok">모두 확인됨</span>
+        {% endif %}
+      </div>
+-----8<-----
+
+  ※ confirm(' ... 처리할까요?\n(지금 ... ') 안의 \n 은
+     역슬래시(\) + 소문자 n 두 글자 그대로 입력합니다 (확인창 줄바꿈).
+     한글 윈도우 글꼴에서는 \ 가 ₩ 로 보일 수 있는데 같은 글자입니다.
+
+
+----------------------------------------------------------------------
+ 4-4. 표 머리글 - 확인 칸 추가
+----------------------------------------------------------------------
+위치: 약 38행
+찾을 문구: <th>CaseNotation</th><th data-nosort>관리</th>
+
+[기존]
+-----8<-----
+<th>CaseNotation</th><th data-nosort>관리</th>
+-----8<-----
+
+[변경]
+-----8<-----
+<th>CaseNotation</th><th>확인</th><th data-nosort>관리</th>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 4-5. 표 내용 - 미확인 행 표시 + 확인 칸
+----------------------------------------------------------------------
+위치: 약 40~44행
+찾을 문구: {% for s in signals %}
+
+[기존]
+-----8<-----
+            {% for s in signals %}
+            <tr>
+              <td>{{ loop.index }}</td><td>{{ s.grade }}</td><td>{{ s.name }}</td>
+              <td>{{ s.satellite }}</td><td>{{ s.case_notation }}</td>
+              <td class="actions">{{ edit_link('signal_edit', s.id) }} {{ delete_button(url_for('signal_delete', item_id=s.id)) }}</td>
+-----8<-----
+
+[변경]  ※ <tr> 줄이 바뀌고, 확인 칸 <td> 한 줄이 추가됩니다.
+-----8<-----
+            {% for s in signals %}
+            <tr {% if not s.checked_by %}class="unchecked"{% endif %}>
+              <td>{{ loop.index }}</td><td>{{ s.grade }}</td><td>{{ s.name }}</td>
+              <td>{{ s.satellite }}</td><td>{{ s.case_notation }}</td>
+              <td class="nw">{{ check_cell(s.checked_by, url_for('signal_check', item_id=s.id), url_for('signal_uncheck', item_id=s.id)) }}</td>
+              <td class="actions">{{ edit_link('signal_edit', s.id) }} {{ delete_button(url_for('signal_delete', item_id=s.id)) }}</td>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 4-6. 빈 목록 줄 - colspan 6 → 7
+----------------------------------------------------------------------
+위치: 약 47행
+[기존]
+-----8<-----
+            <tr class="empty"><td colspan="6">등록된 신호처리가 없습니다.</td></tr>
+-----8<-----
+
+[변경]
+-----8<-----
+            <tr class="empty"><td colspan="7">등록된 신호처리가 없습니다.</td></tr>
+-----8<-----
+
+
+======================================================================
+ 5. templates/analysis.html
+======================================================================
+
+----------------------------------------------------------------------
+ 5-1. 맨 위 import 줄 (2행) - check_cell 추가
+----------------------------------------------------------------------
+[기존]
+-----8<-----
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link with context %}
+-----8<-----
+
+[변경]
+-----8<-----
+{% from '_macros.html' import date_nav, badge, delete_button, edit_link, check_cell with context %}
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-2. check_all 매크로 추가 ([미확인 전체 확인] 버튼 묶음)
+----------------------------------------------------------------------
+위치: 약 9행 {% block content %} 줄 바로 아래,
+      {{ date_nav(url_for('analysis'), ...) }} 위
+
+  이 매크로가 "대상 명시" 3가지를 모두 처리합니다.
+    - 버튼 글자: 미확인 2건 확인 (내 분석)
+    - 필터 중 안내: 전체 보기에는 미확인 7건 →
+    - 확인창: [보기: 내 분석] 분석중 미확인 2건을 확인 처리할까요?
+
+[추가]
+-----8<-----
+{# [미확인 전체 확인] 버튼 묶음
+   kind  : 'start'(분석중 표, 시작확인) / 'end'(분석종료 표, 종료확인)
+   title : 확인창에 적을 표 이름
+   ids   : 지금 보기에서 미확인인 건의 id
+   all_n : 전체 보기 기준 미확인 건수
+   rows  : 지금 표의 건수 #}
+{% macro check_all(kind, title, ids, all_n, rows) %}
+<span class="grow"></span>
+{% if ids %}
+<span class="chip old">미확인 {{ ids|length }}건</span>
+<form method="post" action="{{ url_for('analysis_check_all', kind=kind) }}" class="inline"
+      onsubmit="return confirm('[보기: {{ who_label }}] {{ title }} 미확인 {{ ids|length }}건을 확인 처리할까요?\n(지금 화면에 보이는 건만 처리됩니다)')">
+  {% for i in ids %}<input type="hidden" name="ids" value="{{ i }}">{% endfor %}
+  <input type="hidden" name="next" value="{{ here }}">
+  <button class="btn" type="submit">미확인 {{ ids|length }}건 확인 ({{ who_label }})</button>
+</form>
+{% elif rows %}
+<span class="ok">모두 확인됨</span>
+{% endif %}
+{# 필터 중이고 다른 사람 건에 미확인이 남아 있으면 안내 #}
+{% if who != 'all' and all_n > ids|length %}
+<a class="muted" href="{{ url_for('analysis', date=d, who='all') }}">전체 보기에는 미확인 {{ all_n }}건 →</a>
+{% endif %}
+{% endmacro %}
+-----8<-----
+
+  ※ \n 은 4-3 과 같이 역슬래시 + n 그대로 입력합니다.
+  ※ 이 매크로는 {% block content %} 안쪽에 있어야 합니다.
+     (block 밖에 두면 화면에 그려지지 않을 수 있음)
+
+
+----------------------------------------------------------------------
+ 5-3. 분석중 카드 머리 - check_all 한 줄 추가
+----------------------------------------------------------------------
+위치: 약 51행
+찾을 문구: 일 넘은 건 {{ old_count }}건
+
+[기존]
+-----8<-----
+    {% if old_count %}<span class="chip old">{{ old_days }}일 넘은 건 {{ old_count }}건 — 끝났다면 [분석종료]를 눌러 주세요</span>{% endif %}
+  </div>
+-----8<-----
+
+[변경]
+-----8<-----
+    {% if old_count %}<span class="chip old">{{ old_days }}일 넘은 건 {{ old_count }}건 — 끝났다면 [분석종료]를 눌러 주세요</span>{% endif %}
+    {{ check_all('start', '분석중', start_ids, all_start_unchecked, ongoing|length) }}
+  </div>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-4. 분석중 표 머리글 - 시작확인 칸 추가
+----------------------------------------------------------------------
+위치: 약 56행
+찾을 문구: <th>경과</th><th>CaseNotation</th>
+
+[기존]
+-----8<-----
+<th>경과</th><th>CaseNotation</th><th>비고</th><th data-nosort>관리</th>
+-----8<-----
+
+[변경]
+-----8<-----
+<th>경과</th><th>CaseNotation</th><th>비고</th><th>시작확인</th><th data-nosort>관리</th>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-5. 분석중 표 내용 - 미확인 행 표시 + 시작확인 칸
+----------------------------------------------------------------------
+위치: 약 59~64행
+찾을 문구: {% set days = elapsed_days(a.start_date, d) %}
+
+(1) <tr> 줄
+[기존]
+-----8<-----
+        {% set days = elapsed_days(a.start_date, d) %}
+        <tr>
+-----8<-----
+
+[변경]
+-----8<-----
+        {% set days = elapsed_days(a.start_date, d) %}
+        <tr {% if not a.start_checked_by %}class="unchecked"{% endif %}>
+-----8<-----
+
+(2) 비고 칸 다음, <td class="actions"> 위에 한 줄 추가
+[기존]
+-----8<-----
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('analysis_finish', item_id=a.id) }}" class="inline"
+-----8<-----
+
+[변경]
+-----8<-----
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="nw">{{ check_cell(a.start_checked_by, url_for('analysis_check', item_id=a.id, kind='start'), url_for('analysis_uncheck', item_id=a.id, kind='start')) }}</td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('analysis_finish', item_id=a.id) }}" class="inline"
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-6. 분석중 빈 목록 줄 - colspan 6 → 7
+----------------------------------------------------------------------
+위치: 약 75행
+[기존]
+-----8<-----
+        <tr class="empty"><td colspan="6">분석중인 건이 없습니다.</td></tr>
+-----8<-----
+
+[변경]
+-----8<-----
+        <tr class="empty"><td colspan="7">분석중인 건이 없습니다.</td></tr>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-7. 분석종료 카드 머리 - check_all 한 줄 추가
+----------------------------------------------------------------------
+위치: 약 84행
+찾을 문구: 종료 {{ finished|length }}건
+
+[기존]
+-----8<-----
+    <span class="muted">{{ d }} 종료 {{ finished|length }}건</span></div>
+-----8<-----
+
+[변경]  ※ 맨 끝의 </div> 가 아래로 내려갑니다.
+-----8<-----
+    <span class="muted">{{ d }} 종료 {{ finished|length }}건</span>
+    {{ check_all('end', '분석종료', end_ids, all_end_unchecked, finished|length) }}
+  </div>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-8. 분석종료 표 머리글 - 종료확인 칸 추가
+----------------------------------------------------------------------
+위치: 약 87행
+찾을 문구: <th>종료일</th><th>CaseNotation</th>
+
+[기존]
+-----8<-----
+<th>종료일</th><th>CaseNotation</th><th>비고</th><th data-nosort>관리</th>
+-----8<-----
+
+[변경]
+-----8<-----
+<th>종료일</th><th>CaseNotation</th><th>비고</th><th>종료확인</th><th data-nosort>관리</th>
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-9. 분석종료 표 내용 - 미확인 행 표시 + 종료확인 칸
+----------------------------------------------------------------------
+위치: 약 89~93행
+찾을 문구: {% for a in finished %}
+
+[기존]
+-----8<-----
+        {% for a in finished %}
+        <tr>
+          <td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td><td class="nw">{{ a.end_date }}</td>
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="actions">
+-----8<-----
+
+[변경]
+-----8<-----
+        {% for a in finished %}
+        <tr {% if not a.end_checked_by %}class="unchecked"{% endif %}>
+          <td class="nw">{{ a.manager }}</td><td class="nw">{{ a.start_date }}</td><td class="nw">{{ a.end_date }}</td>
+          <td>{{ a.case_notation }}</td><td>{{ a.note }}</td>
+          <td class="nw">{{ check_cell(a.end_checked_by, url_for('analysis_check', item_id=a.id, kind='end'), url_for('analysis_uncheck', item_id=a.id, kind='end')) }}</td>
+          <td class="actions">
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 5-10. 분석종료 빈 목록 줄 - colspan 6 → 7
+----------------------------------------------------------------------
+위치: 약 99행
+[기존]
+-----8<-----
+        <tr class="empty"><td colspan="6">이 날짜에 종료된 건이 없습니다.</td></tr>
+-----8<-----
+
+[변경]
+-----8<-----
+        <tr class="empty"><td colspan="7">이 날짜에 종료된 건이 없습니다.</td></tr>
+-----8<-----
+
+  참고: 분석종료 표에는 종료확인만 보입니다. 시작확인을 받지 않은 채
+        종료된 건은 시작확인이 빈 채로 남습니다.
+
+
+======================================================================
+ 6. templates/index.html (홈 화면 배지)
+======================================================================
+
+----------------------------------------------------------------------
+ 6-1. 신규 신호처리 카드 머리
+----------------------------------------------------------------------
+위치: 약 51행
+찾을 문구: <h2>신규 신호처리</h2>
+
+[기존]
+-----8<-----
+      {{ badge('3팀') }}<h2>신규 신호처리</h2><span class="muted">{{ data.signals|length }}건</span>
+-----8<-----
+
+[변경]  (아래 한 줄 추가)
+-----8<-----
+      {{ badge('3팀') }}<h2>신규 신호처리</h2><span class="muted">{{ data.signals|length }}건</span>
+      {% if unchecked.signal %}<span class="chip old">미확인 {{ unchecked.signal }}건</span>{% endif %}
+-----8<-----
+
+
+----------------------------------------------------------------------
+ 6-2. 분석현황 카드 머리
+----------------------------------------------------------------------
+위치: 약 72행
+찾을 문구: 분석중 {{ data.ongoing|length }}건
+
+[기존]
+-----8<-----
+      <span class="muted">분석중 {{ data.ongoing|length }}건 · 분석종료 {{ data.finished|length }}건</span>
+-----8<-----
+
+[변경]  (아래 두 줄 추가)
+-----8<-----
+      <span class="muted">분석중 {{ data.ongoing|length }}건 · 분석종료 {{ data.finished|length }}건</span>
+      {% if unchecked.start %}<span class="chip old">시작 미확인 {{ unchecked.start }}건</span>{% endif %}
+      {% if unchecked.end %}<span class="chip old">종료 미확인 {{ unchecked.end }}건</span>{% endif %}
+-----8<-----
+
+  참고: 미확인이 0건이면 배지가 안 보입니다. 홈 화면 표 자체는 바꾸지 않습니다.
+
+
+======================================================================
+ 7. static/style.css
+======================================================================
+
+----------------------------------------------------------------------
+ 7-1. 색 추가
+----------------------------------------------------------------------
+위치: 약 78행 다음
+찾을 문구: .chip.old {
+         이 줄 바로 아래
+
+[추가]
+-----8<-----
+.chip.chk { background: #E4F1E6; color: #2F6B3A; }                     /* 확인됨 (✔ 확인자) */
+.btn2.chk { border-color: #2F6B3A; color: #2F6B3A; }                    /* [확인] 버튼 */
+tr.unchecked td { background: #FFF8E6; }                                 /* 미확인 행 배경 */
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+          background: #FBE3E0; color: #9B2C1F; padding: 10px 16px; border-radius: 6px; }  /* 다른 날짜 미확인 알림 */
+-----8<-----
+
+  참고: 색은 이미 쓰고 있는 .ok(초록)과 .chip.old(빨강) 값에 맞췄습니다.
+        브라우저가 옛 CSS 를 기억해서 색이 안 바뀌면 Ctrl+F5 로 새로고침하세요.
+
+
+======================================================================
+ 8. 마무리 - DB 새로 만들기
+======================================================================
+  1) stop_server.bat 로 서버 끄기 (또는 검은 창에서 Ctrl+C)
+  2) 프로그램 폴더의 worklog.db 삭제
+     (백업 폴더에 예전 백업이 있으면 그것도 테스트용이면 정리)
+  3) run.bat 로 서버 다시 켜기 → 새 구조로 worklog.db 자동 생성
+  4) 계정을 다시 만들고 아래 [직접 확인할 것] 순서대로 눌러 보기
+
+
+======================================================================
+ [직접 확인할 것] - 회사 PC에서 고친 뒤 눌러 볼 순서
+======================================================================
+계정 2개(A, B)로 확인합니다.
+
+[3팀 신호처리]
+  □ 3건 추가 → 카드 머리에 '미확인 3건', 행 배경이 연한 노랑
+  □ 1건 [확인] → '✔ (내 급수 이름)' 표시, '미확인 2건'
+  □ [취소] → 다시 미확인
+  □ A가 화면을 열어 둔 채 B가 1건 추가 → A가 [미확인 전체 확인]
+    → B가 추가한 건은 미확인으로 남음 (새로고침하면 보임)
+  □ 확인된 건 [수정] → 저장 → 미확인으로 바뀜
+  □ 어제 날짜에 미확인 건을 남기고 오늘로 이동 → 위에 '다른 날짜 미확인' 알림,
+    날짜를 누르면 그 날로 이동
+  □ 모두 확인하면 '모두 확인됨' 표시, 버튼 사라짐
+
+[5팀 분석현황]
+  □ A 담당 2건, B 담당 3건 등록 → A로 [내 분석] 보기에서
+    버튼이 '미확인 2건 확인 (내 분석)', 옆에 '전체 보기에는 미확인 5건 →'
+  □ 버튼을 누르면 확인창에 '[보기: 내 분석]', 처리 후 '분석중 2건 확인했습니다.'
+    [전체] 보기에서 B의 3건은 미확인 그대로
+  □ [사람 선택]에서 B를 고르면 버튼 글자가 '(B의 급수 이름)'으로 바뀜
+  □ [분석종료] → 분석종료 표에 종료 미확인으로 나옴 → [확인]
+  □ [분석중으로 되돌리기] → 시작확인은 남고, 다시 종료하면 종료확인은 비어 있음
+  □ 확인된 건 [수정] → 저장 → 시작확인·종료확인 모두 비어 있음
+
+[홈 화면]
+  □ 신호처리·분석현황 카드 제목 옆에 미확인 배지, 모두 확인하면 사라짐
+  □ 엑셀 다운로드·인쇄는 이전과 똑같이 나옴
+
+
+======================================================================
+ [에러가 날 때 자주 있는 원인]
+======================================================================
+  - 서버가 안 켜짐 / SyntaxError, IndentationError
+      → app.py, db.py 들여쓰기(공백 4칸) 확인. 탭 문자가 섞였는지 확인.
+  - "sqlite3.OperationalError: no such column: checked_by" (또는 start_checked_by)
+      → 옛 worklog.db 가 남아 있음. 서버 끄고 worklog.db 삭제 후 다시 켜기.
+      → 그래도 나면 db.py SCHEMA 의 쉼표(,) 빠짐 확인 (1-1, 1-2).
+  - "UndefinedError: 'check_cell' is undefined"
+      → signal.html / analysis.html 맨 위 import 줄에 check_cell 빠짐 (4-1, 5-1).
+  - "BuildError: Could not build url for endpoint 'signal_check'" 등
+      → app.py 에 라우트 추가가 빠졌거나 함수 이름 오타 (2-5, 2-9).
+  - 화면에 한글/✔ 가 깨짐
+      → 템플릿 파일을 UTF-8 로 저장했는지 확인.
+  - 에러 내용은 검은 창 마지막 줄, 또는 숨김 실행이면 server.log 에 있습니다.
+
+
+======================================================================
+ [테스트 결과] - 이 PC에서 확인한 내용
+======================================================================
+  - 위 내용을 실제 코드에 반영하고, 임시 DB로 자동 테스트 44개를 돌려
+    모두 통과했습니다.
+    (확인/취소/전체 확인, 화면을 연 뒤 추가된 건 제외, 이미 확인된 건
+     덮어쓰지 않음, 수정·되돌리기 시 해제, 보기 이름 표시, 홈 배지,
+     엑셀·인쇄·검색 등 다른 화면 정상)
+  - 단, 이 PC에는 Python 2.7 이 없어서 Python 3 + Flask 3.1 로 테스트했습니다.
+    코드는 2.7 에서도 도는 문법만 썼습니다 (f-string, rejectattr 등 미사용).
+    회사 PC(2.7)에서는 위 [직접 확인할 것] 으로 한 번 더 눌러 봐 주세요.
+  - 화면 모양(색, 버튼 위치)은 브라우저로 직접 보지는 않았습니다.
